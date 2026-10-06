@@ -204,7 +204,7 @@ struct RecordDock: View {
         GlassEffectContainer(spacing: 12) {
             if model.isRecording || DemoMode.screen == "recording" {
                 recordingPanel
-                    .glassEffect(.regular, in: .rect(cornerRadius: 28))
+                    .glassEffect(.regular.tint(Color(uiColor: .systemBackground).opacity(0.55)), in: .rect(cornerRadius: 28))
                     .glassEffectID("dock", in: glass)
             } else {
                 HStack(spacing: 12) {

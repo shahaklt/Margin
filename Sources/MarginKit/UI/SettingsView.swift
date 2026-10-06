@@ -44,7 +44,13 @@ struct SpeechModelSection: View {
     var body: some View {
         Section {
             Picker("Speech model", selection: $whisperModel) {
-                ForEach(WhisperModelChoice.allCases) { Text($0.label).tag($0.rawValue) }
+                ForEach(WhisperModelChoice.allCases) { choice in
+                    #if os(iOS)
+                    Text(choice.shortLabel).tag(choice.rawValue)
+                    #else
+                    Text(choice.label).tag(choice.rawValue)
+                    #endif
+                }
             }
             .onChange(of: whisperModel) { model.prepareModels() }
             Picker("Language", selection: $language) {

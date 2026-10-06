@@ -31,6 +31,15 @@ enum WhisperModelChoice: String, CaseIterable, Identifiable {
         }
     }
 
+    var shortLabel: String {
+        switch self {
+        case .fast: "Fast (Base, 140 MB)"
+        case .balanced: "Balanced (Small, 480 MB)"
+        case .accurate: "Accurate (Large Turbo, 630 MB)"
+        case .multilingual: "Max (Large Turbo, 1.6 GB)"
+        }
+    }
+
     static var current: WhisperModelChoice {
         WhisperModelChoice(rawValue: UserDefaults.standard.string(forKey: "whisperModel") ?? "") ?? defaultChoice
     }

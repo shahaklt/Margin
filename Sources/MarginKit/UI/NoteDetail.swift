@@ -163,11 +163,23 @@ struct NoteDetail: View {
             .textFieldStyle(.plain)
             .disabled(note.isBusy)
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) { meta(note) }
-                VStack(alignment: .leading, spacing: 6) { meta(note) }
+            #if os(iOS)
+            // Phone: class chip + one compact line of facts.
+            HStack(spacing: 10) {
+                ClassPicker(note: note)
+                Text(compactFacts(note)).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
             }
+            #else
+            HStack(spacing: 10) { meta(note) }
+            #endif
         }
+    }
+
+    private func compactFacts(_ note: Note) -> String {
+        var parts = [note.createdAt.formatted(.dateTime.month(.abbreviated).day().hour().minute())]
+        if note.duration > 0 { parts.append(note.duration.friendlyDuration) }
+        if note.speakerCount > 0 { parts.append("\(note.speakerCount) speaker\(note.speakerCount == 1 ? "" : "s")") }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
