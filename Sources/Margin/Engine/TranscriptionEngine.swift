@@ -56,13 +56,23 @@ actor TranscriptionEngine {
 
         let task = Task {
             let base = NoteStore.modelsDir
+            let repoDir = base.appendingPathComponent("models/argmaxinc", isDirectory: true)
             if whisper == nil || loadedModel != model {
                 whisper = nil
-                progress(0, "Downloading Whisper model")
-                let folder = try await WhisperKit.download(variant: model, downloadBase: base) { p in
-                    progress(p.fractionCompleted * 0.85, "Downloading Whisper model")
+                // Use the copy on disk when it's complete, so launches work offline and skip the network.
+                let local = repoDir.appendingPathComponent("whisperkit-coreml/openai_whisper-\(model)")
+                let folder: URL
+                if Self.isComplete(local, needs: ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc", "config.json"]) {
+                    folder = local
+                } else {
+                    progress(0, "Downloading Whisper model")
+                    folder = try await WhisperKit.download(variant: model, downloadBase: base) { p in
+                        progress(p.fractionCompleted * 0.6, "Downloading Whisper model")
+                    }
                 }
-                progress(0.86, "Loading Whisper model")
+                // First load after install/update: Core ML compiles the model for the Neural Engine.
+                // That can take a few minutes for large models and is cached afterwards.
+                progress(-1, "Optimizing for your Mac's Neural Engine — first launch only, can take a few minutes")
                 let config = WhisperKitConfig(
                     model: model,
                     downloadBase: base,
@@ -77,8 +87,17 @@ actor TranscriptionEngine {
                 loadedModel = model
             }
             if speakers == nil {
-                progress(0.93, "Preparing speaker model")
-                let config = PyannoteConfig(downloadBase: base.path, load: true, verbose: false, logLevel: .error)
+                progress(-1, "Preparing speaker model")
+                let local = repoDir.appendingPathComponent("speakerkit-coreml")
+                let haveLocal = Self.isComplete(local, needs: ["speaker_segmenter", "speaker_embedder", "speaker_clusterer"])
+                let config = PyannoteConfig(
+                    downloadBase: base.path,
+                    modelFolder: haveLocal ? local.path : nil,
+                    download: !haveLocal,
+                    load: true,
+                    verbose: false,
+                    logLevel: .error
+                )
                 speakers = try await SpeakerKit(config)
             }
             progress(1, "Ready")
@@ -138,6 +157,10 @@ actor TranscriptionEngine {
                 if order[id] == nil { order[id] = order.count }
                 return SpeakerTurn(speaker: order[id]!, start: Double(seg.startTime), end: Double(seg.endTime))
             }
+    }
+
+    private static func isComplete(_ dir: URL, needs: [String]) -> Bool {
+        needs.allSatisfy { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
     }
 
     static func clean(_ s: String) -> String {

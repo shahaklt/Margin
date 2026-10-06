@@ -44,7 +44,7 @@ struct MenuBarMenu: View {
         Button(model.isRecording ? "Stop Recording" : "Start Recording") { model.toggleRecording() }
             .keyboardShortcut("r", modifiers: [.command, .option])
         if !model.modelReady {
-            Text(model.modelError.map { "Model error: \($0)" } ?? "\(model.modelStatus) \(Int(model.modelProgress * 100))%")
+            Text(model.modelError.map { "Model error: \($0)" } ?? (model.modelProgress < 0 ? model.modelStatus : "\(model.modelStatus) \(Int(model.modelProgress * 100))%"))
         }
         Divider()
         Button("Open Margin") {

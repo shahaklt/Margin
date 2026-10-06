@@ -194,9 +194,13 @@ struct ModelStatusCard: View {
                 Text(error).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
                 Button("Try Again") { model.prepareModels() }.controlSize(.small)
             } else {
-                Text(model.modelStatus).font(.caption.weight(.medium))
-                ProgressView(value: model.modelProgress).controlSize(.small)
-                Text("One-time download. Runs fully offline after.").font(.caption2).foregroundStyle(.secondary)
+                Text(model.modelStatus).font(.caption.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+                if model.modelProgress < 0 {
+                    ProgressView().progressViewStyle(.linear).controlSize(.small)
+                } else {
+                    ProgressView(value: model.modelProgress).controlSize(.small)
+                }
+                Text("You can record now — transcription catches up when this finishes.").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .padding(10)

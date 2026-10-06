@@ -105,7 +105,7 @@ struct ModelSettings: View {
                 LabeledContent("Status") {
                     if model.modelReady { Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
                     else if let e = model.modelError { Text(e).foregroundStyle(.orange).lineLimit(2) }
-                    else { Text("\(model.modelStatus) \(Int(model.modelProgress * 100))%").foregroundStyle(.secondary) }
+                    else { Text(model.modelProgress < 0 ? model.modelStatus : "\(model.modelStatus) \(Int(model.modelProgress * 100))%").foregroundStyle(.secondary) }
                 }
             } footer: {
                 Text("Whisper (WhisperKit) for transcription and Pyannote (SpeakerKit) for telling speakers apart. Both run on the Neural Engine, fully offline.")
