@@ -43,11 +43,15 @@ final class Recorder {
     private var file: AVAudioFile?
 
     static func requestPermission() async -> Bool {
+        #if os(iOS)
+        return await AVAudioApplication.requestRecordPermission()
+        #else
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized: return true
         case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
         default: return false
         }
+        #endif
     }
 
     func start(writingTo url: URL?) throws {
@@ -55,6 +59,11 @@ final class Recorder {
         buffer = SampleBuffer()
         levels = Array(repeating: 0, count: Self.levelHistory)
 
+        #if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP, .defaultToSpeaker, .mixWithOthers])
+        try session.setActive(true)
+        #endif
         let engine = AVAudioEngine()
         let input = engine.inputNode
         let inFormat = input.outputFormat(forBus: 0)
@@ -133,6 +142,9 @@ final class Recorder {
         isRecording = false
         startedAt = nil
         levels = Array(repeating: 0, count: Self.levelHistory)
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
         return Double(buffer.count) / Self.sampleRate
     }
 }

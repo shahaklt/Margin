@@ -32,7 +32,15 @@ enum WhisperModelChoice: String, CaseIterable, Identifiable {
     }
 
     static var current: WhisperModelChoice {
-        WhisperModelChoice(rawValue: UserDefaults.standard.string(forKey: "whisperModel") ?? "") ?? .accurate
+        WhisperModelChoice(rawValue: UserDefaults.standard.string(forKey: "whisperModel") ?? "") ?? defaultChoice
+    }
+
+    static var defaultChoice: WhisperModelChoice {
+        #if os(iOS)
+        .balanced
+        #else
+        .accurate
+        #endif
     }
 }
 
@@ -55,7 +63,7 @@ actor TranscriptionEngine {
         if let preparing { return try await preparing.value }
 
         let task = Task {
-            let base = NoteStore.modelsDir
+            let base = Library.modelsDir
             let repoDir = base.appendingPathComponent("models/argmaxinc", isDirectory: true)
             if whisper == nil || loadedModel != model {
                 whisper = nil

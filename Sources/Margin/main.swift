@@ -24,6 +24,23 @@ if args.count >= 3, args[1] == "--selftest" {
             notes.keyPoints.forEach { print(" • \($0)") }
             notes.actionItems.forEach { print(" ☐ \($0)") }
             print("Filed into: \(classes.first { $0.id == notes.classID }?.name ?? "Unsorted")")
+
+            if let out = ProcessInfo.processInfo.environment["MARGIN_SHEET_OUT"] {
+                let brain = ClaudeBrain()
+                print("\nClaude available: \(await brain.isAvailable())")
+                var n = Note(title: notes.title, createdAt: Date())
+                n.lines = lines
+                n.duration = Double(samples.count) / 16000
+                let t1 = Date()
+                let r = try await brain.writeNotes(transcript: n.labeledTranscript, title: n.title, className: nil, date: n.createdAt, classes: classes.map(\.name))
+                print(String(format: "Claude wrote notes in %.0fs — title: %@ · class: %@", Date().timeIntervalSince(t1), r.title, r.className ?? "nil"))
+                r.actionItems.forEach { print(" ☐ \($0)") }
+                let tex = LaTeXSheet.document(title: r.title, className: r.className, date: n.createdAt, duration: n.duration, body: r.latexBody)
+                try tex.write(toFile: out + ".tex", atomically: true, encoding: .utf8)
+                let pdf = try await TeXCompiler().compile(tex)
+                try pdf.write(to: URL(fileURLWithPath: out + ".pdf"))
+                print("PDF: \(out).pdf (\(pdf.count / 1024) KB)")
+            }
             exit(0)
         } catch {
             print("FAILED: \(error)")

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SidebarItem: Hashable {
     case all, unsorted, folder(UUID)
@@ -10,12 +11,23 @@ struct ContentView: View {
     @State private var search = ""
     @State private var editingClass: ClassFolder?
     @State private var addingClass = false
+    @State private var importing = false
+    @State private var showSettings = false
+    @State private var dropTargeted = false
 
     var body: some View {
         @Bindable var model = model
         NavigationSplitView {
             Sidebar(selection: $sidebar, editingClass: $editingClass, addingClass: $addingClass)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 300)
+                #if os(iOS)
+                .navigationTitle("Margin")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                    }
+                }
+                #endif
         } content: {
             NoteList(items: filteredNotes, title: listTitle, selection: $model.selectedNoteID)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 420)
@@ -24,17 +36,43 @@ struct ContentView: View {
                 NoteDetail(noteID: id)
                     .id(id)
             } else {
-                EmptyDetail()
+                EmptyDetail(importing: $importing)
             }
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Search notes")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                Button { importing = true } label: { Label("Import Audio", systemImage: "square.and.arrow.down") }
+                    .help("Import a voice memo or audio file")
+            }
+            ToolbarItem(placement: .primaryAction) {
                 RecordButton()
+            }
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: AudioFiles.importTypes, allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result { model.importAudio(urls) }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            let audio = urls.filter { url in
+                AudioFiles.importTypes.contains { UTType(filenameExtension: url.pathExtension)?.conforms(to: $0) ?? false }
+            }
+            model.importAudio(audio)
+            return !audio.isEmpty
+        } isTargeted: { dropTargeted = $0 }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8]))
+                    .overlay { Label("Drop audio to transcribe", systemImage: "waveform.badge.plus").font(.title3.bold()) }
+                    .padding(8)
+                    .allowsHitTesting(false)
             }
         }
         .sheet(isPresented: $addingClass) { ClassEditor(folder: nil) }
         .sheet(item: $editingClass) { ClassEditor(folder: $0) }
+        #if os(iOS)
+        .sheet(isPresented: $showSettings) { NavigationStack { PhoneSettings() } }
+        #endif
         .alert("Margin", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -96,14 +134,22 @@ struct RecordButton: View {
 
 struct EmptyDetail: View {
     @Environment(AppModel.self) private var model
+    @Binding var importing: Bool
+
     var body: some View {
         ContentUnavailableView {
             Label("No Note Selected", systemImage: "waveform")
         } description: {
-            Text("Press ⌥⌘R anywhere to start recording. Margin transcribes on your Mac, tells speakers apart, writes notes, and files them into the right class.")
+            #if os(macOS)
+            Text("Press ⌥⌘R anywhere to start recording, or drop in a voice memo. Margin transcribes on your Mac, tells speakers apart, writes a LaTeX note sheet, and files it into the right class.")
+            #else
+            Text("Record a class or import a voice memo. Margin transcribes it, tells speakers apart, and files it into the right class.")
+            #endif
         } actions: {
             Button("Start Recording") { model.toggleRecording() }
                 .buttonStyle(.glassProminent)
+            Button("Import Voice Memo…") { importing = true }
+                .buttonStyle(.glass)
         }
     }
 }
@@ -130,10 +176,12 @@ struct Sidebar: View {
                         .dropDestination(for: String.self) { ids, _ in file(ids, into: c.id) }
                         .contextMenu {
                             Button("Edit Class…") { editingClass = c }
+                            #if os(macOS)
                             Button("Show in Finder") {
-                                let url = NoteStore.exportRoot.appendingPathComponent(c.name)
-                                NSWorkspace.shared.open(FileManager.default.fileExists(atPath: url.path) ? url : NoteStore.exportRoot)
+                                let url = model.store.classesRoot.appendingPathComponent(NoteStore.sanitize(c.name))
+                                NSWorkspace.shared.open(FileManager.default.fileExists(atPath: url.path) ? url : model.store.root)
                             }
+                            #endif
                             Divider()
                             Button("Delete Class", role: .destructive) { pendingDelete = c }
                         }
@@ -148,7 +196,7 @@ struct Sidebar: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if !model.modelReady { ModelStatusCard().padding(10) }
+            if model.transcribeOnThisDevice && !model.modelReady { ModelStatusCard().padding(10) }
         }
         .confirmationDialog("Delete “\(pendingDelete?.name ?? "")”?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
             Button("Delete Class", role: .destructive) {
@@ -220,7 +268,7 @@ struct NoteList: View {
     var body: some View {
         Group {
             if items.isEmpty {
-                ContentUnavailableView("No Notes", systemImage: "note.text", description: Text("Recordings you make will appear here."))
+                ContentUnavailableView("No Notes", systemImage: "note.text", description: Text("Recordings and imported voice memos appear here."))
             } else {
                 List(selection: $selection) {
                     ForEach(groupedByDay, id: \.0) { day, notes in
@@ -262,12 +310,16 @@ struct NoteRow: View {
             HStack(spacing: 6) {
                 if note.status == .recording {
                     RecordingDot()
-                } else if note.isBusy {
+                } else if note.isBusy || note.sheetStatus == .generating {
                     ProgressView().controlSize(.mini)
+                } else if note.status == .queued {
+                    Image(systemName: "icloud.and.arrow.up").foregroundStyle(.secondary).font(.caption)
                 } else if note.status == .failed {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
                 }
                 Text(note.title).font(.headline).lineLimit(1)
+                Spacer(minLength: 0)
+                if note.origin == .iphone { Image(systemName: "iphone").font(.caption2).foregroundStyle(.tertiary) }
             }
             HStack(spacing: 6) {
                 Text(note.createdAt.formatted(date: .omitted, time: .shortened))
@@ -300,15 +352,10 @@ struct NoteActions: View {
                 Button(c.name) { model.store.file(note.id, into: c.id) }
             }
         }
-        Button("Copy as Markdown") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(model.store.markdown(note), forType: .string)
-        }
-        .disabled(note.isBusy)
-        Button("Rewrite Notes") { model.regenerate(note.id) }
+        Button(model.brainAvailable ? "Rewrite Notes & Sheet with Claude" : "Rewrite Notes") { model.regenerate(note.id) }
             .disabled(note.isBusy || note.lines.isEmpty)
-        if note.status == .failed {
-            Button("Retry Transcription") { model.retry(note.id) }
+        if note.status == .failed || note.status == .queued {
+            Button("Transcribe Now") { model.retry(note.id) }
         }
         Divider()
         Button("Delete Note", role: .destructive) {

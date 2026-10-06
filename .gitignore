@@ -2,3 +2,7 @@
 build/
 *.app
 .swiftpm/
+iOS/.check/.build/
+iOS/.check/Sources/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/

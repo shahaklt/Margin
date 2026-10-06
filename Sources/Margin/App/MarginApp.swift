@@ -2,8 +2,15 @@ import SwiftUI
 import AppKit
 
 struct MarginApp: App {
-    @State private var model = AppModel()
+    @State private var model: AppModel
+    private let services: MacServices
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+
+    init() {
+        let model = AppModel(brain: ClaudeBrain(), compiler: TeXCompiler())
+        _model = State(initialValue: model)
+        services = MacServices(model: model)
+    }
 
     var body: some Scene {
         Window("Margin", id: "main") {
@@ -29,6 +36,20 @@ struct MarginApp: App {
             SettingsView()
                 .environment(model)
         }
+    }
+}
+
+/// Mac-only extras: the floating recording indicator and the global ⌥⌘R shortcut.
+@MainActor
+final class MacServices {
+    let indicator: IndicatorController
+    let hotKey: HotKey
+
+    init(model: AppModel) {
+        let indicator = IndicatorController(model: model)
+        self.indicator = indicator
+        hotKey = HotKey(keyCode: 15 /* R */, modifiers: [.command, .option]) { [weak model] in model?.toggleRecording() }
+        model.onActivityChange = { [weak indicator] in indicator?.update() }
     }
 }
 

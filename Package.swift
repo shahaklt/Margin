@@ -14,7 +14,9 @@ let package = Package(
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "SpeakerKit", package: "argmax-oss-swift"),
             ],
-            path: "Sources/Margin"
+            path: "Sources",
+            // MarginKit is shared verbatim with the iOS app (see iOS/project.yml).
+            sources: ["Margin", "MarginKit"]
         ),
     ],
     swiftLanguageModes: [.v5]

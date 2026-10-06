@@ -2,6 +2,8 @@
 import AppKit
 
 let out = CommandLine.arguments[1]
+// iOS icons must be full-bleed and opaque; the system applies the rounded mask.
+let fullBleed = CommandLine.arguments.contains("--ios")
 let sizes = [16, 32, 64, 128, 256, 512, 1024]
 for px in sizes {
     let s = CGFloat(px)
@@ -9,9 +11,10 @@ for px in sizes {
                                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-    let inset = s * 0.098
+    let inset = fullBleed ? 0 : s * 0.098
     let rect = NSRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
-    let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225)
+    let radius = fullBleed ? 0 : rect.width * 0.225
+    let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
     let shadow = NSShadow()
     shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
