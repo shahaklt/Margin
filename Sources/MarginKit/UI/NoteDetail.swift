@@ -71,9 +71,20 @@ enum DetailTab: String, CaseIterable, Identifiable {
     }
 }
 
+enum Layout {
+    #if os(iOS)
+    static let hPad: CGFloat = 16
+    static let titleSize: CGFloat = 24
+    #else
+    static let hPad: CGFloat = 28
+    static let titleSize: CGFloat = 26
+    #endif
+}
+
 struct NoteDetail: View {
     @Environment(AppModel.self) private var model
     let noteID: UUID
+    var initialTab: DetailTab = .notes
     @State private var player = AudioPlayer()
     @State private var tab: DetailTab = .notes
     @State private var renamingSpeaker: Int?
@@ -94,7 +105,7 @@ struct NoteDetail: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, Layout.hPad)
                 .padding(.top, 20)
                 .padding(.bottom, 12)
                 .frame(maxWidth: 820)
@@ -124,7 +135,7 @@ struct NoteDetail: View {
             }
             .onAppear {
                 player.load(model.store.audioURL(note))
-                if note.status == .recording { tab = .transcript }
+                tab = note.status == .recording ? .transcript : initialTab
             }
             .onChange(of: note.status) { if note.status == .ready { player.load(model.store.audioURL(note)) } }
             .onChange(of: note.audioFileName) { player.load(model.store.audioURL(note)) }
@@ -148,7 +159,7 @@ struct NoteDetail: View {
                 get: { note.title },
                 set: { new in model.store.update(noteID) { $0.title = new } }
             ), axis: .vertical)
-            .font(.system(size: 26, weight: .bold))
+            .font(.system(size: Layout.titleSize, weight: .bold))
             .textFieldStyle(.plain)
             .disabled(note.isBusy)
 
@@ -217,7 +228,7 @@ struct NoteDetail: View {
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, Layout.hPad)
                 .padding(.vertical, 18)
                 .frame(maxWidth: 820, alignment: .leading)
                 .frame(maxWidth: .infinity)
@@ -270,7 +281,7 @@ struct NotesTab: View {
                     Text("Written by \(engine)").font(.caption).foregroundStyle(.tertiary)
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, Layout.hPad)
             .padding(.vertical, 18)
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity)
@@ -421,7 +432,7 @@ struct AskTab: View {
                         }
                         Color.clear.frame(height: 1).id("end")
                     }
-                    .padding(.horizontal, 28)
+                    .padding(.horizontal, Layout.hPad)
                     .padding(.vertical, 18)
                     .frame(maxWidth: 820, alignment: .leading)
                     .frame(maxWidth: .infinity)

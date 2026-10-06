@@ -7,7 +7,7 @@ struct MarginPhoneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            PhoneRoot()
                 .environment(model)
                 // Voice Memos → Share → Margin (or "Open in Margin" from Files) lands here.
                 .onOpenURL { url in
@@ -18,6 +18,13 @@ struct MarginPhoneApp: App {
                     if phase == .active {
                         model.store.syncFromDisk()
                         model.processBackgroundWork()
+                    }
+                }
+                .task {
+                    if DemoMode.isOn { DemoMode.seed(model) }
+                    if PendingIntent.startRecording {
+                        PendingIntent.startRecording = false
+                        await model.startRecording()
                     }
                 }
         }

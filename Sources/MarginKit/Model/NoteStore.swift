@@ -29,6 +29,9 @@ enum Library {
 
     /// The synced (or local fallback) library root.
     @MainActor static func resolveRoot() -> URL {
+        if DemoMode.isOn {
+            return ensure(FileManager.default.temporaryDirectory.appendingPathComponent("MarginDemo", isDirectory: true))
+        }
         #if os(macOS)
         let syncOn = UserDefaults.standard.object(forKey: "syncICloud") as? Bool ?? true
         if syncOn, iCloudAvailable {

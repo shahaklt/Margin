@@ -99,6 +99,40 @@ enum NoteGenerator {
         )
     }
 
+    /// Answers a question about a note with the on-device model. Its context is small, so only the
+    /// transcript lines most related to the question (plus the summary) are included.
+    static func answer(question: String, note: Note) async throws -> String {
+        let qWords = Set(question.lowercased().split { !$0.isLetter }.map(String.init).filter { $0.count > 3 })
+        let ranked = note.lines.enumerated().map { i, line -> (Int, Int) in
+            let words = Set(line.text.lowercased().split { !$0.isLetter }.map(String.init))
+            return (i, words.intersection(qWords).count)
+        }.sorted { $0.1 > $1.1 }
+        var picked: [Int] = []
+        var budget = 1100
+        for (i, _) in ranked {
+            let n = note.lines[i].text.split(separator: " ").count
+            if n > budget { continue }
+            picked.append(i)
+            budget -= n
+            if budget < 40 { break }
+        }
+        let excerpt = picked.sorted().map { "[\(note.lines[$0].start.clock)] \(note.speakerName(note.lines[$0].speaker)): \(note.lines[$0].text)" }.joined(separator: "\n")
+        let history = note.chat.filter { !$0.pending }.suffix(4).map { "\($0.role == .user ? "Student" : "You"): \($0.text.prefix(400))" }.joined(separator: "\n")
+        let prompt = """
+        Class: \(note.title)
+        Summary: \(note.summary)
+        Key points: \(note.keyPoints.joined(separator: "; "))
+        Reminders: \(note.actionItems.joined(separator: "; "))
+
+        Relevant transcript excerpts:
+        \(excerpt)
+        \(history.isEmpty ? "" : "\nEarlier conversation:\n\(history)\n")
+        Question: \(question)
+        """
+        let session = LanguageModelSession(instructions: BrainPrompt.askSystem)
+        return try await session.respond(to: prompt).content
+    }
+
     // MARK: On-device model (map → reduce, the model has a small context window)
 
     private static func generateWithModel(transcript: String, classes: [ClassFolder]) async throws -> LectureNotes {

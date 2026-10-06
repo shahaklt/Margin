@@ -62,11 +62,15 @@ final class AppModel {
         #endif
     }
 
+    /// For Shortcuts / Action button intents.
+    static weak var shared: AppModel?
+
     init(brain: NotesBrain? = nil, compiler: SheetCompiler? = nil) {
         self.brain = brain
         self.compiler = compiler
         store.onRemoteChange = { [weak self] in self?.processBackgroundWork() }
-        if transcribeOnThisDevice { prepareModels() }
+        if transcribeOnThisDevice && !DemoMode.isOn { prepareModels() }
+        Self.shared = self
         Task { await refreshBrain() }
         backgroundTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.processBackgroundWork() }
@@ -183,6 +187,13 @@ final class AppModel {
         let sr = Int(Recorder.sampleRate)
         let window = 28 * sr
         while !s.stopped {
+            #if os(iOS)
+            // iOS doesn't allow GPU work in the background; catch up when the app is back on screen.
+            if UIApplication.shared.applicationState == .background {
+                try? await Task.sleep(for: .seconds(2))
+                continue
+            }
+            #endif
             let available = s.buffer.count - s.cutIndex
             if available >= window, await engine.isReady {
                 let cut = quietestPoint(in: s.buffer, from: s.cutIndex + 20 * sr, to: s.cutIndex + window)
@@ -332,7 +343,16 @@ final class AppModel {
         guard let note = store.note(noteID), !note.lines.isEmpty else { return }
         let useBrain = await brain?.isAvailable() ?? false
         let canCompile = await compiler?.isAvailable() ?? false
-        guard useBrain || canCompile else { return }
+        guard useBrain || canCompile else {
+            #if os(iOS)
+            // No Claude or TeX on the phone: render a sheet PDF on-device now. It stays `pending`,
+            // so a Mac signed in to Claude replaces it with the full LaTeX sheet when it syncs.
+            let tex = LaTeXSheet.document(title: note.title, className: store.folder(note.classID)?.name,
+                                          date: note.createdAt, duration: note.duration, body: LaTeXSheet.localBody(note))
+            store.saveSheet(noteID, tex: tex, pdf: SheetPDFRenderer.pdf(for: note, className: store.folder(note.classID)?.name))
+            #endif
+            return
+        }
 
         store.locallyBusy.insert(noteID)
         defer { store.locallyBusy.remove(noteID) }
@@ -418,7 +438,33 @@ final class AppModel {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         store.update(noteID) { $0.chat.append(ChatMessage(role: .user, text: q, pending: true)) }
-        answerPending(noteID)
+        if brain == nil, NoteGenerator.aiAvailable {
+            answerOnDevice(noteID)
+        } else {
+            answerPending(noteID)
+        }
+    }
+
+    /// iPhone with Apple Intelligence: answer right away with the on-device model.
+    /// (Without it, the question stays pending and the Mac answers with Claude after syncing.)
+    private func answerOnDevice(_ noteID: UUID) {
+        guard !inFlight.contains(noteID) else { return }
+        inFlight.insert(noteID)
+        Task {
+            defer { inFlight.remove(noteID) }
+            while let note = store.note(noteID), let pending = note.chat.first(where: { $0.pending }) {
+                let answer: String
+                do {
+                    answer = try await NoteGenerator.answer(question: pending.text, note: note) + "\n\n*Answered on-device*"
+                } catch {
+                    answer = "⚠️ The on-device model couldn't answer (\(error.localizedDescription)). Ask again with your Mac on to use Claude."
+                }
+                store.update(noteID) {
+                    if let i = $0.chat.firstIndex(where: { $0.id == pending.id }) { $0.chat[i].pending = false }
+                    $0.chat.append(ChatMessage(role: .assistant, text: answer))
+                }
+            }
+        }
     }
 
     private func answerPending(_ noteID: UUID) {
