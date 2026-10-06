@@ -31,4 +31,34 @@ for s in home folder notes sheet transcript ask recording settings; do shoot "$s
 xcrun simctl ui "$UDID" appearance dark
 shoot home home-dark
 shoot notes notes-dark
+xcrun simctl ui "$UDID" appearance light
+
+# Real pipeline on iOS: import a two-speaker lecture, let Whisper + SpeakerKit run, check the result.
+CONT=$(xcrun simctl get_app_container "$UDID" com.ltshahak.margin.phone data)
+mkdir -p "$CONT/Documents"
+cp TestAudio/lecture.m4a "$CONT/Documents/"
+xcrun simctl launch --terminate-running-process "$UDID" com.ltshahak.margin.phone -MarginImportTest >/dev/null
+report() {
+  python3 - "$CONT/Documents/Margin/Notes" "$1" <<'PY'
+import json, sys, glob
+for f in glob.glob(sys.argv[1] + "/*.json"):
+    d = json.load(open(f))
+    if sys.argv[2] == "short":
+        print(d.get("status"), "|", d.get("statusDetail") or "", "|", d.get("title"))
+        continue
+    print("status:", d.get("status"), d.get("statusDetail"))
+    print("title:", d.get("title"), "| engine:", d.get("notesEngine"), "| sheet:", d.get("sheetStatus"))
+    for l in d.get("lines", []):
+        print(f"Speaker {l['speaker']+1}: {l['text']}")
+PY
+}
+for i in $(seq 1 90); do
+  sleep 10
+  RESULT=$(report short)
+  echo "t=$((i*10))s $RESULT"
+  case "$RESULT" in ready*|failed*) break;; esac
+done
+sleep 5
+xcrun simctl io "$UDID" screenshot "$OUT/shots/import-result.png" >/dev/null
+report full | tee "$OUT/shots/import-result.txt"
 ls -la "$OUT/shots"

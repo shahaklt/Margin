@@ -22,6 +22,11 @@ struct MarginPhoneApp: App {
                 }
                 .task {
                     if DemoMode.isOn { DemoMode.seed(model) }
+                    // CI: import Documents/lecture.m4a through the normal pipeline.
+                    if ProcessInfo.processInfo.arguments.contains("-MarginImportTest") {
+                        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        model.importAudio([docs.appendingPathComponent("lecture.m4a")])
+                    }
                     if PendingIntent.startRecording {
                         PendingIntent.startRecording = false
                         await model.startRecording()
