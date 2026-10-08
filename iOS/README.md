@@ -2,23 +2,14 @@
 
 Same app as the Mac version (shared code in `Sources/MarginKit`), synced through an iCloud Drive folder.
 
-## Install (needs full Xcode once)
+## Install
 
-1. Install **Xcode** from the App Store, open it once, and add the iOS platform when asked.
-2. In Terminal:
-   ```sh
-   cd ~/Developer/Margin/iOS
-   xcodegen            # regenerates MarginPhone.xcodeproj (brew install xcodegen)
-   open MarginPhone.xcodeproj
-   ```
-3. Xcode → Settings → Accounts → add your Apple ID.
-4. Select the **MarginPhone** target → Signing & Capabilities → Team: your Personal Team.
-   If the bundle ID is taken, change `com.ltshahak.margin.phone` to anything unique.
-5. Plug in your iPhone, turn on **Settings → Privacy & Security → Developer Mode**, pick the phone as the run destination, press ▶︎.
-6. On the phone: **Settings → General → VPN & Device Management** → trust your developer certificate.
+Easiest: grab `Margin.ipa` from the "Build iPhone IPA" GitHub Actions run (or Releases) and install it
+with [Sideloadly](https://sideloadly.io). See the main README.
 
-With a free Apple ID the app expires after 7 days. Press ▶︎ again in Xcode to refresh it
-(or use a $99/yr developer account for 1-year installs).
+With Xcode instead: `cd iOS && xcodegen && open MarginPhone.xcodeproj`, set your Personal Team under
+Signing & Capabilities (change the bundle ID if it's taken), plug in the phone and press ▶︎.
+Free Apple IDs re-sign every 7 days.
 
 ## First run on the phone
 
